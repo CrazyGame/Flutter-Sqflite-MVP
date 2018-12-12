@@ -1,0 +1,116 @@
+本文实例讲述了基于thinkPHP实现的微信自定义分享功能。分享给大家供大家参考，具体如下：
+
+在许多大的网站我们都会看到点击分享就可以把数据分享到微信或ＱＱ或其它的平台了,下面我们来看一段php版微信自定义分享代码,代码参考官方开发的没有任何问题.
+
+分享需要认证微信订阅号或者服务号.
+
+php 代码(thinkphp):
+
+$appid='xxx';
+$appsecret='xxxx';
+$timestamp = time();
+$noncestr = $this->getRandStr(15);
+// dump();
+$url = 'https://api.weixin.qq.com/cgi-bin/ticket/getticket?access_token='. $this->get_token($appid,$appsecret) .'&type=jsapi';
+$ret_json = $this->curl_get_contents($url);
+$ret = json_decode($ret_json);
+$ticket = $ret-> ticket;
+//var_dump($ret);
+$strvalue = 'jsapi_ticket='.$ticket.'&noncestr='.$noncestr.'×tamp='.$timestamp.'&url=http://'.$_SERVER['HTTP_HOST'].$_SERVER['REQUEST_URI'];
+$signature = sha1($strvalue);
+$this->assign('timestamp',$timestamp);
+$this->assign('nonceStr',$noncestr);
+$this->assign('signature',$signature);
+function get_token($appid,$appsecret){
+ if(S('access_token')) return S('access_token');
+ $url = "https://api.weixin.qq.com/cgi-bin/token?grant_type=client_credential&appid=$appid&secret=$appsecret";
+ $ret_json = $this->curl_get_contents($url);
+ $ret = json_decode($ret_json);
+ if($ret -> access_token){
+ S('access_token',$ret -> access_token,7200);
+ return $ret -> access_token;
+ }
+}
+function is_weixin(){
+if (strpos($_SERVER['HTTP_USER_AGENT'], 'MicroMessenger') !== false ) {
+return true;
+}
+return false;
+}
+function getRandStr($length){
+ $str = 'abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+ $randString = '';
+ $len = strlen($str)-1;
+ for($i = 0;$i < $length;$i ++){
+ $num = mt_rand(0, $len);
+ $randString .= $str[$num];
+ }
+ return $randString;
+}
+function curl_get_contents($url){
+ $ch = curl_init();
+ curl_setopt($ch, CURLOPT_URL, $url);
+ curl_setopt($ch, CURLOPT_TIMEOUT, 1);
+ curl_setopt($ch, CURLOPT_MAXREDIRS, 200);
+ curl_setopt($ch, CURLOPT_USERAGENT, _USERAGENT_);
+ curl_setopt($ch, CURLOPT_REFERER, _REFERER_);
+ @curl_setopt($ch, CURLOPT_FOLLOWLOCATION, 1);
+ curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+ curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, FALSE);
+ curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
+ $r = curl_exec($ch);
+ curl_close($ch);
+ return $r;
+}
+
+js代码:需要引入:http://res.wx.qq.com/open/js/jweixin-1.0.0.js
+
+wx.config({
+ debug: false, // 开启调试模式,调用的所有api的返回值会在客户端alert出来，若要查看传入的参数，可以在pc端打开，参数信息会通过log打出，仅在pc端时才会打印。
+ appId: 'wxae7c36a1349c5868', // 必填，公众号的唯一标识
+ timestamp: '{$timestamp}', // 必填，生成签名的时间戳
+ nonceStr: '{$nonceStr}', // 必填，生成签名的随机串
+ signature: '{$signature}',// 必填，签名，见附录1
+ jsApiList: ['onMenuShareTimeline','onMenuShareAppMessage'] // 必填，需要使用的JS接口列表，所有JS接口列表见附录2
+});
+wx.ready(function(){
+wx.onMenuShareTimeline({
+ title: '{$contentInfo.title}', // 分享标题
+ link: window.location.href, // 分享链接
+ imgUrl: 'http://'+window.location.host+'{$categoryInfo.image}', // 分享图标
+ success: function () {
+ // 用户确认分享后执行的回调函数
+ //alert(1111);
+ //fxfunc();
+ },
+ cancel: function () {
+ // 用户取消分享后执行的回调函数
+ //alert("您取消了分享");
+ }
+});
+wx.onMenuShareAppMessage({
+ title: '{$contentInfo.title}', // 分享标题
+ desc: removeHTMLTag('{$contentInfo.content}'), // 分享描述
+ link: window.location.href, // 分享链接
+ imgUrl: 'http://'+window.location.host+'{$categoryInfo.image}', // 分享图标
+ type: '', // 分享类型,music、video或link，不填默认为link
+ dataUrl: '', // 如果type是music或video，则要提供数据链接，默认为空
+ success: function () {
+ // 用户确认分享后执行的回调函数
+ //fxfunc();
+ },
+ cancel: function () {
+ //alert("您取消了分享");
+ // 用户取消分享后执行的回调函数
+ }
+});
+ // config信息验证后会执行ready方法，所有接口调用都必须在config接口获得结果之后，config是一个客户端的异步操作，所以如果需要在页面加载时就调用相关接口，则须把相关接口放在ready函数中调用来确保正确执行。对于用户触发时才调用的接口，则可以直接调用，不需要放在ready函数中。
+});
+function removeHTMLTag(str) {
+ str = str.replace(/<\/?[^>]*>/g,''); //去除HTML tag
+ str = str.replace(/[ | ]*\n/g,'\n'); //去除行尾空白
+ //str = str.replace(/\n[\s| | ]*\r/g,'\n'); //去除多余空行
+ str=str.replace(/ /ig,'');//去掉 
+ return str;
+}
+更多关于PHP相关内容感兴趣的读者可查看本站专题：《PHP微信开发技巧汇总》、《PHP编码与转码操作技巧汇总》、《PHP网络编程技巧总结》、《PHP基本语法入门教程》、《php字符串(string)用法总结》、《php+mysql数据库操作入门教程》及《php常见数据库操作技巧汇总》
